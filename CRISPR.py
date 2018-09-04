@@ -185,8 +185,6 @@ def main():
 
     if args.cas9:
         invalid_cas9_targets = []
-        # cas9_guides = []
-        # print(len(k),len(v))
         for k,v in fasta_file.items():
             # + strand
             motif = re.compile(r'(?=.GG)')
@@ -194,7 +192,6 @@ def main():
             for target in cas9_target_list:
                 pam_location = (target[0]+1,target[0]+3)
                 pam_site = PAM(pam_location,k,'cas9')
-                # print(pam_site.id)
                 sgrna_position = (pam_site.location[0]-(args.l+1),pam_site.location[0]-1)
                 if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
                     sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
@@ -218,7 +215,6 @@ def main():
             for target in cas9_target_list2:
                 pam_location = (target[0]+1,target[0]+3)
                 pam_site = PAM(pam_location[::-1],k,'cas9',False)
-                # print(pam_site.id)
                 sgrna_position = (pam_site.location[0]+(args.l+1),pam_site.location[0]+1)
                 if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
                     sgrna_sequence = v[sgrna_position[1]:sgrna_position[0]]
@@ -239,16 +235,9 @@ def main():
                 print (f'''
                 {len(cas9_target_list + cas9_target_list2)} Cas9 PAM sites were found on {k[1::]}
                 ''')
-        # for guide in cas9_guides:
-        #     if args.verbose:
-        #         print(guide.id, guide.sequence, len(guide.sequence))
-        # if args.verbose:
-        #     print (f'''
-        #     A total of {len(cas9_guides)} Cas9 gRNAs were generated!
-        # ''')
+
     if args.cpf1:
         invalid_cpf1_targets = []
-        # cpf1_guides = []
         for k,v in fasta_file.items():
         # + strand
             motif = re.compile(r'(?=TTT.)')
@@ -257,11 +246,9 @@ def main():
                 pam_location = (target[0]+1,target[0]+4)
                 pam_site = PAM(pam_location,k,'cpf1')
                 del pam_location
-                # print(pam_site.id)
                 sgrna_position = (pam_site.location[1]+1,pam_site.location[1]+(args.l+1))
                 if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
                     sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
-                    # sgrna_sequence = get_reverse_complement(sgrna_sequence)
                     sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
                     sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
                     entry = {
@@ -273,9 +260,9 @@ def main():
                             }
                     with open(args.o, mode='a') as CPF1:
                         json.dump(entry,CPF1,indent=2)
-
                 else:
                     invalid_cpf1_targets.append(pam_site)
+
         # - strand
             motif = re.compile(r'(?=.AAA)')
             cpf1_target_list2 = find_PAM_site(motif,v)
@@ -283,7 +270,6 @@ def main():
                 pam_location = (target[0]+1,target[0]+4)
                 pam_site = PAM(pam_location[::-1],k,'cpf1',False)
                 del pam_location
-                # print(pam_site.id)
                 sgrna_position = (pam_site.location[1]-1,pam_site.location[1]-(args.l+1))
                 if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
                     sgrna_sequence = v[sgrna_position[1]:sgrna_position[0]]
@@ -306,16 +292,6 @@ def main():
                 print (f'''
                 {len(cpf1_target_list + cpf1_target_list2)} Cpf1 PAM sites were found on {k[1::]}
                 ''')
-        # for guide in cpf1_guides:
-        #     if args.verbose:
-        #         print(guide.id, guide.sequence, len(guide.sequence))
-        # if args.verbose:
-        #     print (f'''
-        #     A total of {len(cpf1_guides)} Cpf1 gRNAs were generated!
-        # ''')
-    
-
-
 
     ### Gather info on each target motif
 
@@ -337,64 +313,28 @@ def main():
     #         cut position - done
     #         gRNA sequence - done
             From GFF.db:
-                geneID or geneName 
+                geneID or gene_name
                 type (cds, ncs)
                 feature (exon, intron, promoter)
-    # DESIGN:
-    # if strand = +:
-    #     guide.start = target.end - len
-    #     guide.end = target.start - 1
-    #     guide = sequence[guide.start::guide.end]
-    #     guide = guide.rc
-    #     guide = guide.grna
-    #     return guide
-    # if strand = -:
-    #     guide.start = target.start + len
-    #     guide.end = target.start + 1
-    #     guide = sequence[guide.start::guide.end]
-    #     guide = guide.rc
-    #     guide = guide.grna
-    #     return guide
     VERIFICATION:
     test doench score
     test number of hits with mismatches = 0,1,2,3,4
-        recommend = 0 for 0-2 mismatches
+        recommended = hits-n(ploidy number) == 0 for 0-2 mismatches
     RANK:
     By  position in gene (early sequence) > conserved exon > num. off target > on target doench score
     RETURN:
         gene name / ID
         Nuclease type
+        Cut site position
         guide RNA sequence
         Chr.start_pos : end_pos
         genome
         gene
-        features
-    """
-
-    """
-    output => dictionary: key = genome.chr.output => genome.chr.cut_pos.strand (e.g.: Gm.Chr1.3492.sense)
-    pos+args.L)
+        features (defined by cut site position)
     """
 
 
-    ### WRITE TO OUTPUT FILE
-    # if args.cas9:
-    #     Cas9_guide_info = []
-    #     for i in cas9_guides:
-    #         Cas9_guide_info.append(
-    #             {
-    #                 i.id:i.sequence
-    #             }
-    #         )
-
-    # if args.cpf1:
-    #     Cpf1_guide_info = []
-    #     for i in cpf1_guides:
-    #         Cpf1_guide_info.append(
-    #             {
-    #                 i.id:i.sequence
-    #             }
-    #         )
+    ### WRITE TO OUTPUT FILE (add to head)
 
     # output_dict = {
     #     "Target genome": 'Sorghum Bicolor',
