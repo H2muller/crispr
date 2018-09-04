@@ -23,7 +23,7 @@ parser.add_argument('-f', '--fasta', required=True, dest='f',
 # parser.add_argument('-g', '--gff', required=True, dest='g', 
 #                     help='[required] path to input file in GFF format'
 #                     )
-parser.add_argument('-o', '--output', dest='o', default='output.fasta',
+parser.add_argument('-o', '--output', dest='o', default='output.txt',
                     help='path to output file'
                     )
 parser.add_argument('-l', '--length', metavar='', dest='l', type=int, default=20,
@@ -182,12 +182,10 @@ def main():
         Please wait, this may take a while...
         ''')
 
-    cas9_targets = []
-    cas9_guides = []
-    cpf1_targets = []
-    cpf1_guides = []
 
     if args.cas9:
+        invalid_cas9_targets = []
+        # cas9_guides = []
         # print(len(k),len(v))
         for k,v in fasta_file.items():
             # + strand
@@ -197,7 +195,23 @@ def main():
                 pam_location = (target[0]+1,target[0]+3)
                 pam_site = PAM(pam_location,k,'cas9')
                 # print(pam_site.id)
-                cas9_targets.append(pam_site)
+                sgrna_position = (pam_site.location[0]-(args.l+1),pam_site.location[0]-1)
+                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
+                    sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
+                    sgrna_sequence = get_reverse_complement(sgrna_sequence)
+                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
+                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
+                    entry = {
+                            "sgRNA unique ID": sgrna.id,
+                            "Guide sequence": sgrna.sequence,
+                            "sgRNA position": (sgrna.location[0],sgrna.location[1]),
+                            "Cut site position": sgrna.cutsite,
+                            "Genomic features": 'sgrna.feature'
+                            }
+                    with open(args.o, mode='a') as CAS9:
+                        json.dump(entry,CAS9,indent=2)
+                else:
+                    invalid_cas9_targets.append(pam_site)
             # - strand
             motif = re.compile(r'(?=CC.)')
             cas9_target_list2 = find_PAM_site(motif,v)
@@ -205,37 +219,36 @@ def main():
                 pam_location = (target[0]+1,target[0]+3)
                 pam_site = PAM(pam_location[::-1],k,'cas9',False)
                 # print(pam_site.id)
-                cas9_targets.append(pam_site)
-            if args.verbose:
-                print (f'''
-                {len(cas9_target_list + cas9_target_list2)} Cas9 PAM sites were found on {k[1::]}
-                ''')
-        ### DESIGN ###
-        for pam_site in cas9_targets:
-            # print(pam_site.id)
-            if pam_site.strand == '+':
-                sgrna_position = (pam_site.location[0]-(args.l+1),pam_site.location[0]-1)
-                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
-                    sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
-                    sgrna_sequence = get_reverse_complement(sgrna_sequence)
-                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
-                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
-                    cas9_guides.append(sgrna)
-            elif pam_site.strand == '-':
                 sgrna_position = (pam_site.location[0]+(args.l+1),pam_site.location[0]+1)
                 if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
                     sgrna_sequence = v[sgrna_position[1]:sgrna_position[0]]
                     sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
                     sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
-                    cas9_guides.append(sgrna)
-        for guide in cas9_guides:
+                    entry = {
+                            "sgRNA unique ID": sgrna.id,
+                            "Guide sequence": sgrna.sequence,
+                            "sgRNA position": (sgrna.location[0],sgrna.location[1]),
+                            "Cut site position": sgrna.cutsite,
+                            "Genomic features": 'sgrna.feature'
+                            }
+                    with open(args.o, mode='a') as CAS9:
+                        json.dump(entry,CAS9,indent=2)
+                else:
+                    invalid_cas9_targets.append(pam_site)
             if args.verbose:
-                print(guide.id, guide.sequence, len(guide.sequence))
-        if args.verbose:
-            print (f'''
-            A total of {len(cas9_guides)} Cas9 gRNAs were generated!
-        ''')
+                print (f'''
+                {len(cas9_target_list + cas9_target_list2)} Cas9 PAM sites were found on {k[1::]}
+                ''')
+        # for guide in cas9_guides:
+        #     if args.verbose:
+        #         print(guide.id, guide.sequence, len(guide.sequence))
+        # if args.verbose:
+        #     print (f'''
+        #     A total of {len(cas9_guides)} Cas9 gRNAs were generated!
+        # ''')
     if args.cpf1:
+        invalid_cpf1_targets = []
+        # cpf1_guides = []
         for k,v in fasta_file.items():
         # + strand
             motif = re.compile(r'(?=TTT.)')
@@ -245,8 +258,24 @@ def main():
                 pam_site = PAM(pam_location,k,'cpf1')
                 del pam_location
                 # print(pam_site.id)
-                cpf1_targets.append(pam_site)
-                del pam_site
+                sgrna_position = (pam_site.location[1]+1,pam_site.location[1]+(args.l+1))
+                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
+                    sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
+                    # sgrna_sequence = get_reverse_complement(sgrna_sequence)
+                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
+                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
+                    entry = {
+                            "sgRNA unique ID": sgrna.id,
+                            "Guide sequence": sgrna.sequence,
+                            "sgRNA position": (sgrna.location[0],sgrna.location[1]),
+                            "Cut site position": sgrna.cutsite,
+                            "Genomic features": 'sgrna.feature'
+                            }
+                    with open(args.o, mode='a') as CPF1:
+                        json.dump(entry,CPF1,indent=2)
+
+                else:
+                    invalid_cpf1_targets.append(pam_site)
         # - strand
             motif = re.compile(r'(?=.AAA)')
             cpf1_target_list2 = find_PAM_site(motif,v)
@@ -255,43 +284,36 @@ def main():
                 pam_site = PAM(pam_location[::-1],k,'cpf1',False)
                 del pam_location
                 # print(pam_site.id)
-                cpf1_targets.append(pam_site)
-                del pam_site
+                sgrna_position = (pam_site.location[1]-1,pam_site.location[1]-(args.l+1))
+                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
+                    sgrna_sequence = v[sgrna_position[1]:sgrna_position[0]]
+                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
+                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
+                    entry = {
+                            "sgRNA unique ID": sgrna.id,
+                            "Guide sequence": sgrna.sequence,
+                            "Cut site position": sgrna.cutsite,
+                            "sgRNA chromosome": sgrna.chr,
+                            "sgRNA position": (sgrna.location[0],sgrna.location[1]),
+                            "sgRNA strand": sgrna.strand,
+                            "Genomic features": 'sgrna.feature'
+                            }
+                    with open(args.o, mode='a') as CPF1:
+                        json.dump(entry,CPF1,indent=2)
+                else:
+                    invalid_cpf1_targets.append(pam_site)
             if args.verbose:
                 print (f'''
                 {len(cpf1_target_list + cpf1_target_list2)} Cpf1 PAM sites were found on {k[1::]}
                 ''')
-        ### DESIGN ###
-        for pam_site in cpf1_targets:
-            # print(pam_site.id)
-            if pam_site.strand == '+':
-                sgrna_position = (pam_site.location[1]+1,pam_site.location[1]+(args.l+1))
-                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
-                    sgrna_sequence = v[sgrna_position[0]:sgrna_position[1]]
-                    # sgrna_sequence = get_reverse_complement(sgrna_sequence)
-                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
-                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
-                    cpf1_guides.append(sgrna)
-            elif pam_site.strand == '-':
-                sgrna_position = (pam_site.location[1]-1,pam_site.location[1]-(args.l+1))
-                if sgrna_position[0] >= 0 and sgrna_position[0] <= len(v) and sgrna_position[1] >= 0 and sgrna_position[1] <= len(v):
-                    sgrna_sequence = v[sgrna_position[1]:sgrna_position[0]]
-                    # sgrna_sequence = get_reverse_complement(sgrna_sequence)
-                    sgrna_sequence = get_gRNA_sequence(sgrna_sequence)
-                    sgrna = CRISPR(sgrna_sequence,sgrna_position,sgrna_position[1]-3,pam_site.chr,pam_site.type,pam_site.strand)
-                    cpf1_guides.append(sgrna)
-        for guide in cpf1_guides:
-            if args.verbose:
-                print(guide.id, guide.sequence, len(guide.sequence))
-        if args.verbose:
-            print (f'''
-            A total of {len(cpf1_guides)} Cpf1 gRNAs were generated!
-        ''')
+        # for guide in cpf1_guides:
+        #     if args.verbose:
+        #         print(guide.id, guide.sequence, len(guide.sequence))
+        # if args.verbose:
+        #     print (f'''
+        #     A total of {len(cpf1_guides)} Cpf1 gRNAs were generated!
+        # ''')
     
-    if args.cas9 and args.cpf1:
-        print(f'A total of {len(cas9_guides)+len(cpf1_guides)} gRNAs were generated for both systems')
-
-    ### VALIDATION ###
 
 
 
@@ -318,7 +340,7 @@ def main():
                 geneID or geneName 
                 type (cds, ncs)
                 feature (exon, intron, promoter)
-    # DESIGN - done
+    # DESIGN:
     # if strand = +:
     #     guide.start = target.end - len
     #     guide.end = target.start - 1
@@ -346,7 +368,7 @@ def main():
         Chr.start_pos : end_pos
         genome
         gene
-        genomic features
+        features
     """
 
     """
@@ -356,33 +378,35 @@ def main():
 
 
     ### WRITE TO OUTPUT FILE
-    Cas9_guide_info = []
-    for i in cas9_guides:
-        Cas9_guide_info.append(
-            {
-                i.id:i.sequence
-            }
-        )
+    # if args.cas9:
+    #     Cas9_guide_info = []
+    #     for i in cas9_guides:
+    #         Cas9_guide_info.append(
+    #             {
+    #                 i.id:i.sequence
+    #             }
+    #         )
 
-    Cpf1_guide_info = []
-    for i in cpf1_guides:
-        Cpf1_guide_info.append(
-            {
-                i.id:i.sequence
-            }
-        )
+    # if args.cpf1:
+    #     Cpf1_guide_info = []
+    #     for i in cpf1_guides:
+    #         Cpf1_guide_info.append(
+    #             {
+    #                 i.id:i.sequence
+    #             }
+    #         )
 
-    output_dict = {
-        "Target genome": 'Sorghum Bicolor',
-        "Total Cas9 gRNAs": len(cas9_guides),
-        "Total Cpf1 gRNAs": len(cpf1_guides),
-        "Generated with": "$software name",
-        "Date": str(datetime.datetime.now()),
-        "Cas9 sgRNA Info": Cas9_guide_info,
-        "Cpf1 sgRNA Info": Cpf1_guide_info
-    }
-    with open(args.o, 'w') as f:
-        json.dump(output_dict, f, indent=2)
+    # output_dict = {
+    #     "Target genome": 'Sorghum Bicolor',
+    #     "Total Cas9 gRNAs": len(cas9_guides),
+    #     # "Total Cpf1 gRNAs": len(cpf1_guides),
+    #     "Generated with": "$software name",
+    #     "Date": str(datetime.datetime.now()),
+    #     "Cas9 sgRNA Info": Cas9_guide_info,
+    #     # "Cpf1 sgRNA Info": Cpf1_guide_info
+    # }
+    # with open(args.o, 'w') as f:
+    #     json.dump(output_dict, f, indent=2)
 
 ### CONFIRMATION MESSAGE
     print(f'The output file has been generated at {args.o}')
